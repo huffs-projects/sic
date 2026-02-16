@@ -1,0 +1,9 @@
+# Full example from design (Phase 1 schema)
+[sic]
+name = "helix"
+version = "24.03"
+source = { type = "tarball", url = "https://helix-editor.com/helix.tar.gz", hash = "sha256:abcd1234" }
+depends = ["ripgrep >= 13"]
+provides = ["editor"]
+files = ["bin/helix", "share/helix/*"]
+commands = ["helix"]
