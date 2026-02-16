@@ -1,0 +1,6 @@
+# A customizable TUI display/login manager written in Rust
+[sic]
+name = "lemurs"
+version = "0.4.0"
+source = { type = "tarball", url = "https://github.com/coastalwhite/lemurs/archive/refs/tags/v0.4.0.tar.gz", hash = "sha256:05641ea9f0b8fa459c737adccd2f4714fd29e69e07a213c117b35013837bfe3a" }
+depends = []

@@ -1,0 +1,6 @@
+# Browse BBC News like a hacker
+[sic]
+name = "bbcli"
+version = "1.0.3"
+source = { type = "tarball", url = "https://github.com/hako/bbcli/archive/refs/tags/1.0.3.tar.gz", hash = "sha256:52d28119c1b9091e709b1670ae31415915e6a38bc51dd9cafba17f01e012edb3" }
+depends = []

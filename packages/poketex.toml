@@ -1,0 +1,6 @@
+# Simple Pokedex based on TUI
+[sic]
+name = "poketex"
+version = "1.16.4"
+source = { type = "tarball", url = "https://github.com/ckaznable/poketex/archive/refs/tags/v1.16.4.tar.gz", hash = "sha256:ca3933979f124493839790690dfb536b02aae046cd4f3456478556a9ddb2de60" }
+depends = []

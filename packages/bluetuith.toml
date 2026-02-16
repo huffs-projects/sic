@@ -1,0 +1,6 @@
+# A cross-platform TUI bluetooth manager
+[sic]
+name = "bluetuith"
+version = "0.2.6"
+source = { type = "tarball", url = "https://github.com/bluetuith-org/bluetuith/archive/refs/tags/v0.2.6.tar.gz", hash = "sha256:7e4e83fc0ed34b7ffa7d6035363c5380adfb4116136354e32149beb9dcb50bc9" }
+depends = []

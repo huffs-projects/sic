@@ -1,0 +1,6 @@
+# Tetris Sand game in Ratatui
+[sic]
+name = "setrixtui"
+version = "0.4.0"
+source = { type = "tarball", url = "https://github.com/Mjoyufull/Setrixtui/archive/refs/tags/0.4.0.tar.gz", hash = "sha256:a21b771f1690ffd0415cd903c93d6909a185344190e3ee246dfb2cf8a4d21484" }
+depends = []

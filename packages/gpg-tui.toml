@@ -1,0 +1,6 @@
+# Manage your GnuPG keys with ease
+[sic]
+name = "gpg-tui"
+version = "0.11.1"
+source = { type = "tarball", url = "https://github.com/orhun/gpg-tui/archive/refs/tags/v0.11.1.tar.gz", hash = "sha256:ecc232b42ff07888eb12a43daf5a956791a21efc85f6e71fbed9b9769ec50b50" }
+depends = []

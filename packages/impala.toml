@@ -1,0 +1,6 @@
+# TUI for managing wifi on Linux
+[sic]
+name = "impala"
+version = "0.7.4"
+source = { type = "tarball", url = "https://github.com/pythops/impala/archive/refs/tags/v0.7.4.tar.gz", hash = "sha256:948b9b46ee7b8c06016430bc0e9fef8a23ecf9768cfe11ec1f9fd48dde249bb2" }
+depends = []

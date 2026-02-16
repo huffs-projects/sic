@@ -1,0 +1,6 @@
+# Implementation of the Unix fortune command for displaying a random quotation
+[sic]
+name = "fortune-mod"
+version = "fortune-mod-3.26.0"
+source = { type = "tarball", url = "https://github.com/shlomif/fortune-mod/archive/refs/tags/fortune-mod-3.26.0.tar.gz", hash = "sha256:62c406fb01d7090bccb089c55bb3afe77b81cefaebf963c7bfa602ff0c10ab40" }
+depends = []

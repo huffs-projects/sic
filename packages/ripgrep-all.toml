@@ -1,0 +1,6 @@
+# rga: ripgrep, but also search in PDFs, E-Books, Office documents, zip, tar.gz, etc.
+[sic]
+name = "ripgrep-all"
+version = "0.10.10"
+source = { type = "tarball", url = "https://github.com/phiresky/ripgrep-all/archive/refs/tags/v0.10.10.tar.gz", hash = "sha256:17fadc7b73a51608d57f82b4a11f3edc0da87716cc4b302103eed9d4b9010fe5" }
+depends = ["ripgrep >= 13"]

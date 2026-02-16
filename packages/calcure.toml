@@ -1,0 +1,6 @@
+# Modern TUI calendar and task manager with minimal and customizable UI
+[sic]
+name = "calcure"
+version = "3.2.1"
+source = { type = "tarball", url = "https://github.com/anufrievroman/calcure/archive/refs/tags/3.2.1.tar.gz", hash = "sha256:3ed3ab4d0236952733abfc4ccc340581e2b8444119417ebf763b0b7be4f984eb" }
+depends = []

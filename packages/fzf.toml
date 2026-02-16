@@ -1,0 +1,6 @@
+# A command-line fuzzy finder
+[sic]
+name = "fzf"
+version = "0.67.0"
+source = { type = "tarball", url = "https://github.com/junegunn/fzf/archive/refs/tags/v0.67.0.tar.gz", hash = "sha256:da72936dd23045346769dbf233a7a1fa6b4cfe4f0e856b279821598ce8f692af" }
+depends = []

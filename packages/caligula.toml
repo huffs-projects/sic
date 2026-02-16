@@ -1,0 +1,6 @@
+# A user-friendly, lightweight TUI for disk imaging
+[sic]
+name = "caligula"
+version = "0.4.10"
+source = { type = "tarball", url = "https://github.com/ifd3f/caligula/archive/refs/tags/v0.4.10.tar.gz", hash = "sha256:997a9e9c710d9b1fa468eff330defae53c3a2d5fc301303e6115be37af78080f" }
+depends = []

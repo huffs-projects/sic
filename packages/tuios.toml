@@ -1,0 +1,6 @@
+# Terminal UI OS (Terminal Multiplexer)
+[sic]
+name = "tuios"
+version = "0.6.0"
+source = { type = "tarball", url = "https://github.com/Gaurav-Gosain/tuios/archive/refs/tags/v0.6.0.tar.gz", hash = "sha256:722af8631edbf4572d5edc4e067ab8fb5fc5e06cc6052a2f2a292e95c392011c" }
+depends = []

@@ -1,0 +1,6 @@
+# A small TUI journaling tool
+[sic]
+name = "caps-log"
+version = "1.2.1"
+source = { type = "tarball", url = "https://github.com/NikolaDucak/caps-log/archive/refs/tags/1.2.1.tar.gz", hash = "sha256:10090ffc24ae28b7c466999d47c46c649daacbac86107d909d78bafef0e012d7" }
+depends = []

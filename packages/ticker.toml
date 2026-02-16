@@ -1,0 +1,6 @@
+# Track stocks, crypto, and derivatives prices and positions in real time from your terminal
+[sic]
+name = "ticker"
+version = "5.2.0"
+source = { type = "tarball", url = "https://github.com/achannarasappa/ticker/archive/refs/tags/v5.2.0.tar.gz", hash = "sha256:e2cfb09173cce87cb68c42331a6d4e23f5fd6135980e17c2dd37bfd23432cea3" }
+depends = []

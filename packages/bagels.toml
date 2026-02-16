@@ -1,0 +1,6 @@
+# Powerful expense tracker that lives in your terminal
+[sic]
+name = "bagels"
+version = "0.3.12"
+source = { type = "tarball", url = "https://github.com/EnhancedJax/Bagels/archive/refs/tags/0.3.12.tar.gz", hash = "sha256:225c46ebc9977ad6cd3b03d43e1e8901c7811bd6fb8d316f16b236c60a7fed69" }
+depends = []

@@ -1,0 +1,6 @@
+# A terminal-based battery and energy monitor for macOS and Linux
+[sic]
+name = "jolt"
+version = "1.2.0"
+source = { type = "tarball", url = "https://github.com/jordond/jolt/archive/refs/tags/1.2.0.tar.gz", hash = "sha256:c6756b84349a6f253d81eb9ad6074f9b94461043c053b1b7ce5f86c2e1bed04d" }
+depends = []

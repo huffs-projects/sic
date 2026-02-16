@@ -1,0 +1,6 @@
+# Simple TUI audio mixer for PipeWire
+[sic]
+name = "wiremix"
+version = "0.0.0"
+source = { type = "tarball", url = "https://github.com/tsowell/wiremix/archive/refs/heads/main.tar.gz", hash = "sha256:1c5d1b748c27155279228cc7112894cded7b3bf18da0e3be98890f6aea51215a" }
+depends = []

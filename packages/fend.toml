@@ -1,0 +1,6 @@
+# Arbitrary-precision unit-aware calculator
+[sic]
+name = "fend"
+version = "1.5.8"
+source = { type = "tarball", url = "https://github.com/printfn/fend/archive/refs/tags/v1.5.8.tar.gz", hash = "sha256:2c53922b83b693c852581942ddcf8e02e1bcd691f30c00e8066cdd6ab2070b86" }
+depends = []

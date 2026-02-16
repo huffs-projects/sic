@@ -1,0 +1,6 @@
+# TUI dictionary with support for multiple language pairs from FreeDict
+[sic]
+name = "tuidict"
+version = "0.1.5"
+source = { type = "tarball", url = "https://github.com/404Simon/tuidict/archive/refs/tags/v0.1.5.tar.gz", hash = "sha256:4139980e2c8a49c863bf806fff27b0b07505e2a83eba1f02a0cf630f84136d6e" }
+depends = []

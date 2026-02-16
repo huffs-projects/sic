@@ -1,0 +1,6 @@
+# A command-line tool to generate, analyze, convert and manipulate colors
+[sic]
+name = "pastel"
+version = "0.12.0"
+source = { type = "tarball", url = "https://github.com/sharkdp/pastel/archive/refs/tags/v0.12.0.tar.gz", hash = "sha256:2903853f24d742fe955edd9bea17947eb8f3f44000a8ac528d16f2ea1e52b78b" }
+depends = []

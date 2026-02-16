@@ -1,0 +1,6 @@
+# A feature-rich command-line audio/video downloader
+[sic]
+name = "yt-dlp"
+version = "2026.02.04"
+source = { type = "tarball", url = "https://github.com/yt-dlp/yt-dlp/archive/refs/tags/2026.02.04.tar.gz", hash = "sha256:dc846a0c10b7c44c3cc10533bd2c453c9c467f7732dc12ea04f3e606c900572a" }
+depends = []

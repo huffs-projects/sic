@@ -1,0 +1,6 @@
+# A cross-platform terminal game where tetrominos fall and stack
+[sic]
+name = "tetro-tui"
+version = "0.2.7"
+source = { type = "tarball", url = "https://github.com/Strophox/tetro-tui/archive/refs/tags/v0.2.7.tar.gz", hash = "sha256:bb294bc983ac321c2e8971b17aa0ba0b3e01e5f783d222830b5bb8c2b6a0d2f0" }
+depends = []

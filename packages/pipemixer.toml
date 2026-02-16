@@ -1,0 +1,6 @@
+# TUI volume control app for pipewire
+[sic]
+name = "pipemixer"
+version = "0.4.0"
+source = { type = "tarball", url = "https://github.com/heather7283/pipemixer/archive/refs/tags/v0.4.0.tar.gz", hash = "sha256:d009be1381e8a72d1a4e5cd1085bfd1479bcca6fca344cf583eae23ef106ffc1" }
+depends = []

@@ -1,0 +1,6 @@
+# Console Bibliography
+[sic]
+name = "cobib"
+version = "6.0.1"
+source = { type = "tarball", url = "https://github.com/mrossinek/cobib/archive/refs/tags/v6.0.1.tar.gz", hash = "sha256:b6a272b3206742bc8537e7ec2b4041e12a907ee0486dfe969144a94992012753" }
+depends = []

@@ -1,0 +1,6 @@
+# Generates table of contents for markdown files inside local git repository
+[sic]
+name = "doctoc"
+version = "0.0.0"
+source = { type = "tarball", url = "https://github.com/thlorenz/doctoc/archive/refs/heads/main.tar.gz", hash = "sha256:d5558cd419c8d46bdc958064cb97f963d1ea793866414c025906ec15033512ed" }
+depends = []

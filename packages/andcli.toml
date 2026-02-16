@@ -1,0 +1,6 @@
+# A 2FA TUI for your shell
+[sic]
+name = "andcli"
+version = "2.4.3"
+source = { type = "tarball", url = "https://github.com/tjblackheart/andcli/archive/refs/tags/v2.4.3.tar.gz", hash = "sha256:4bdda1a55ef7342cb4264e814b040dae64d2767a507e7eb7e653a73905a783e4" }
+depends = []

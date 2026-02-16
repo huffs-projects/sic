@@ -1,0 +1,6 @@
+# Powerful and highly extensible command-line based document and bibliography manager
+[sic]
+name = "papis"
+version = "0.15.0"
+source = { type = "tarball", url = "https://github.com/papis/papis/archive/refs/tags/v0.15.0.tar.gz", hash = "sha256:40ffd77cde44c7af482ab4523a521754d7c5388d021b01a51eb3c908c6b3cef2" }
+depends = []

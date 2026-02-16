@@ -1,0 +1,6 @@
+# Play chess in your terminal
+[sic]
+name = "gambit"
+version = "0.1.0"
+source = { type = "tarball", url = "https://github.com/maaslalani/gambit/archive/refs/tags/v0.1.0.tar.gz", hash = "sha256:c68d45df6f59fe91d26b58bf635f4d3ca5deeef0ea8c2a0333c4beb3990d0645" }
+depends = []

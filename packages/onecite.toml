@@ -1,0 +1,6 @@
+# An intelligent toolkit to automatically parse, complete, and format academic references
+[sic]
+name = "onecite"
+version = "0.0.0"
+source = { type = "tarball", url = "https://github.com/HzaCode/OneCite/archive/refs/heads/main.tar.gz", hash = "sha256:428714e4b1755158235027f7966051d19e5e9a0ad38a815ccbfe5b38966f7b8c" }
+depends = []

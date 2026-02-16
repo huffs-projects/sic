@@ -1,0 +1,6 @@
+# A simple TUI noise generator
+[sic]
+name = "tanin"
+version = "0.1.0"
+source = { type = "tarball", url = "https://github.com/AnonMiraj/Tanin/archive/refs/tags/v0.1.0.tar.gz", hash = "sha256:b39da1525c5815a1e441630fe0469e7a0aed6e243304984e30c2479bdc4faf07" }
+depends = []
