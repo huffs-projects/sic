@@ -31,7 +31,8 @@ pub use failure::{
     FailureSerializeError, OutputFormat, ResolverFailure,
 };
 pub use resolver::{
-    plan_to_lockfile, resolve, resolve_remove, AvailablePackages, LockfileInput, LockfileMode,
+    lockfile_from_installed, plan_to_lockfile, resolve, resolve_remove, AvailablePackages,
+    LockfileInput, LockfileMode,
     Plan, PlanAction,
     PlanStep, Request, UpgradePolicy,
 };
@@ -75,6 +76,7 @@ pub fn run_with_args(args: impl IntoIterator<Item = impl Into<std::ffi::OsString
         cli::Command::ResolveOnly { name } => cli::run_resolve_only(&cli.global, &prefix, name.as_deref()),
         cli::Command::Doctor => cli::run_doctor(&cli.global, &prefix),
         cli::Command::Search { pattern } => cli::run_search(&cli.global, &prefix, pattern.as_deref()),
+        cli::Command::Info { name } => cli::run_info(&cli.global, &prefix, name.as_str()),
     }
 }
 

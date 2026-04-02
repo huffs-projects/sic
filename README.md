@@ -1,6 +1,6 @@
 # sic
 
-Userland package manager for ~/.local: installs, upgrades, and removes packages under a user prefix without touching the system. Debian and derivatives are supported: sic reads the dpkg database to satisfy dependencies with system packages when possible. On non-Debian systems or when dpkg is not present, the system package set is treated as empty and resolution uses only sic packages.
+Userland package manager for ~/.local: installs, upgrades, and removes packages under a user prefix without touching the system. On Unix, sic reads common system package databases (dpkg, pacman, Alpine apk, Homebrew Cellar) best-effort to satisfy dependencies with already-installed system packages when possible. If none are present or readable, the system package set is empty and resolution uses only sic packages.
 
 ## PATH
 
@@ -11,6 +11,16 @@ export PATH="$HOME/.local/sic/bin:$PATH"
 ```
 
 Or set `SIC_ROOT` to a custom prefix (e.g. `export SIC_ROOT=$HOME/.local/sic`) and add `$SIC_ROOT/bin` to PATH. User is responsible for PATH order: put the sic bin directory first if you want sic-installed packages to take precedence over system ones.
+
+## Man pages
+
+Packages that ship manual pages under `share/man/` in the artifact (for example `share/man/man1/foo.1`) get symlinks in `$SIC_ROOT/share/man/...` on install, and those symlinks are removed when the package is removed or upgraded. Include those paths in the manifest `files` list like any other installed file.
+
+Add the sic man tree to `MANPATH` so `man` finds them, for example:
+
+```bash
+export MANPATH="$HOME/.local/sic/share/man${MANPATH:+:$MANPATH}"
+```
 
 ## Build
 

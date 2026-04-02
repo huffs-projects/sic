@@ -1,0 +1,6 @@
+# Battery charge threshold manager for Linux laptops
+[sic]
+name = "batctl"
+version = "2026.3.13"
+source = { type = "tarball", url = "https://github.com/Ooooze/batctl/archive/refs/tags/v2026.3.13.tar.gz", hash = "sha256:7d7a80a871c162e5dbe873c4a7275d125c3f41fceff87335e3003b45ff32e973" }
+depends = []

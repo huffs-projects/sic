@@ -287,6 +287,33 @@ files = ["bin/foo", "share/bar.txt"]
         String::from_utf8_lossy(&output.stderr)
     );
 
+    let lock_path = prefix.join("sic.lock");
+    assert!(lock_path.is_file(), "sic.lock should be written after install");
+    let lock_s = std::fs::read_to_string(&lock_path).unwrap();
+    assert!(lock_s.contains("foo"), "lockfile should list foo: {}", lock_s);
+
+    let mut cmd = sic_cmd();
+    cmd.args([
+        "--prefix",
+        prefix.to_str().unwrap(),
+        "--packages",
+        packages_dir.to_str().unwrap(),
+        "info",
+        "foo",
+    ]);
+    let output = cmd.output().unwrap();
+    assert!(
+        output.status.success(),
+        "info should succeed: stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let info_out = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        info_out.contains("foo") && info_out.contains("1.0"),
+        "info should mention package and version: {}",
+        info_out
+    );
+
     let mut cmd = sic_cmd();
     cmd.args(["--prefix", prefix.to_str().unwrap(), "status"]);
     let output = cmd.output().unwrap();
@@ -373,7 +400,14 @@ files = ["bin/foo", "share/bar.txt"]
     cmd.args(["--prefix", prefix.to_str().unwrap(), "status"]);
     let output = cmd.output().unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("foo\t1.0") || stdout.contains("foo\t1.0\n"), "status should show foo 1.0: {}", stdout);
+    assert!(
+        stdout.lines().any(|l| {
+            let mut it = l.split_whitespace();
+            it.next() == Some("foo") && it.next() == Some("1.0")
+        }),
+        "status should show foo 1.0: {}",
+        stdout
+    );
 
     // Add v2 manifest and tarball
     let tarball_v2 = build_tarball(&["foo-2.0/bin/foo", "foo-2.0/share/bar.txt"]);
@@ -404,6 +438,8 @@ files = ["bin/foo", "share/bar.txt"]
         prefix.to_str().unwrap(),
         "--packages",
         packages_dir.to_str().unwrap(),
+        "--lockfile-mode",
+        "flexible",
         "upgrade",
         "foo",
     ]);
@@ -420,7 +456,14 @@ files = ["bin/foo", "share/bar.txt"]
     cmd.args(["--prefix", prefix.to_str().unwrap(), "status"]);
     let output = cmd.output().unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("foo\t2.0") || stdout.contains("foo\t2.0\n"), "status after upgrade should show foo 2.0: {}", stdout);
+    assert!(
+        stdout.lines().any(|l| {
+            let mut it = l.split_whitespace();
+            it.next() == Some("foo") && it.next() == Some("2.0")
+        }),
+        "status after upgrade should show foo 2.0: {}",
+        stdout
+    );
 }
 
 #[test]
@@ -475,7 +518,9 @@ files = ["bin/b"]
     );
     std::fs::write(packages_dir.join("b.toml"), manifest_b).unwrap();
 
-    // Install a then b
+    // One `install a b` invocation: a strict `sic.lock` created mid-run is not re-read between
+    // package arguments, so `b` is not rejected as "not in lockfile". (Separate CLI runs would
+    // need `--lockfile-mode flexible` or an updated lockfile.)
     let mut cmd = sic_cmd();
     cmd.args([
         "--prefix",
@@ -484,28 +529,29 @@ files = ["bin/b"]
         packages_dir.to_str().unwrap(),
         "install",
         "a",
-    ]);
-    let output = cmd.output().unwrap();
-    assert!(output.status.success(), "install a: {}", String::from_utf8_lossy(&output.stderr));
-
-    let mut cmd = sic_cmd();
-    cmd.args([
-        "--prefix",
-        prefix.to_str().unwrap(),
-        "--packages",
-        packages_dir.to_str().unwrap(),
-        "install",
         "b",
     ]);
     let output = cmd.output().unwrap();
-    assert!(output.status.success(), "install b: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "install a b: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     let mut cmd = sic_cmd();
     cmd.args(["--prefix", prefix.to_str().unwrap(), "status"]);
     let output = cmd.output().unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("a\t"), "status should list a: {}", stdout);
-    assert!(stdout.contains("b\t"), "status should list b: {}", stdout);
+    assert!(
+        stdout.lines().any(|l| l.split_whitespace().next() == Some("a")),
+        "status should list a: {}",
+        stdout
+    );
+    assert!(
+        stdout.lines().any(|l| l.split_whitespace().next() == Some("b")),
+        "status should list b: {}",
+        stdout
+    );
 
     // Remove a (has dependant b) should fail
     let mut cmd = sic_cmd();
@@ -554,7 +600,16 @@ files = ["bin/b"]
     cmd.args(["--prefix", prefix.to_str().unwrap(), "status"]);
     let output = cmd.output().unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(!stdout.contains("a\t") && !stdout.contains("b\t"), "status should list neither: {}", stdout);
+    assert!(
+        !stdout
+            .lines()
+            .any(|l| l.split_whitespace().next() == Some("a"))
+            && !stdout
+                .lines()
+                .any(|l| l.split_whitespace().next() == Some("b")),
+        "status should list neither: {}",
+        stdout
+    );
 }
 
 #[test]

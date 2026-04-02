@@ -46,6 +46,13 @@ pub fn resolve_lockfile_path(prefix: &Path, lockfile_override: Option<&PathBuf>)
     }
 }
 
+/// Path used when writing `sic.lock` (`--lockfile` or `<prefix>/sic.lock`).
+pub fn lockfile_write_path(prefix: &Path, lockfile_override: Option<&PathBuf>) -> PathBuf {
+    lockfile_override
+        .cloned()
+        .unwrap_or_else(|| prefix.join("sic.lock"))
+}
+
 /// Runs lockfile vs installed check. If lockfile_path is None, returns (true, []).
 /// Otherwise loads Lockfile and InstalledDb and reports mismatches / not in lockfile.
 pub fn run_lockfile_check(
@@ -183,8 +190,68 @@ pub fn run_symlinks_check(prefix: &Path) -> (bool, Vec<String>) {
             }
         }
     }
+    let man_dir = prefix.join("share/man");
+    if man_dir.is_dir() {
+        check_man_symlinks_recursive(prefix, &man_dir, &mut issues, 0);
+    }
     let ok = issues.is_empty();
     (ok, issues)
+}
+
+#[cfg(unix)]
+fn check_man_symlinks_recursive(
+    prefix: &Path,
+    dir: &Path,
+    issues: &mut Vec<String>,
+    depth: u32,
+) {
+    use std::fs;
+
+    if depth >= 256 {
+        return;
+    }
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let meta = match fs::symlink_metadata(&path) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        if meta.is_dir() && !meta.is_symlink() {
+            check_man_symlinks_recursive(prefix, &path, issues, depth + 1);
+            continue;
+        }
+        if !meta.is_symlink() {
+            continue;
+        }
+        let target = match fs::read_link(&path) {
+            Ok(t) => t,
+            Err(_) => {
+                let rel = path.strip_prefix(prefix).unwrap_or(&path);
+                issues.push(format!(
+                    "broken man symlink: {} (read failed)",
+                    rel.display()
+                ));
+                continue;
+            }
+        };
+        let resolved = if target.is_absolute() {
+            target.clone()
+        } else {
+            path.parent().unwrap_or(prefix).join(&target)
+        };
+        if !resolved.exists() {
+            let rel = path.strip_prefix(prefix).unwrap_or(&path);
+            issues.push(format!(
+                "broken man symlink: {} -> {}",
+                rel.display(),
+                target.display()
+            ));
+        }
+    }
 }
 
 #[cfg(not(unix))]

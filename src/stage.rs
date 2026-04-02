@@ -251,7 +251,7 @@ pub fn stage_plan(
         let progress_cb: Option<crate::fetch::ProgressCb> = if show_progress {
             Some(Box::new(move |downloaded: u64, total: Option<u64>| {
                 let line = if let Some(t) = total {
-                    let pct = if t > 0 { (downloaded * 100) / t } else { 0 };
+                    let pct = (downloaded * 100).checked_div(t).unwrap_or(0);
                     format!(
                         "fetch: {} / {} ({}%)\r",
                         format_bytes(downloaded),
@@ -339,6 +339,7 @@ mod tests {
             revision: 0,
             source: source.clone(),
             files: vec!["bin/foo".to_string(), "share/bar.txt".to_string()],
+            commands: vec![],
             action: PlanAction::Install,
         };
         let plan = Plan {
@@ -393,6 +394,7 @@ mod tests {
             revision: 0,
             source,
             files: vec!["share/helix/*".to_string()],
+            commands: vec![],
             action: PlanAction::Install,
         };
         let plan = Plan {
@@ -439,6 +441,7 @@ mod tests {
             revision: 0,
             source,
             files: vec!["share/helix/*".to_string()],
+            commands: vec![],
             action: PlanAction::Install,
         };
         let plan = Plan {

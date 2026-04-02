@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
 
-use crate::doctor::{run_doctor_checks, resolve_lockfile_path};
+use crate::doctor::{lockfile_write_path, run_doctor_checks, resolve_lockfile_path};
 use crate::failure::{emit_failure, OutputFormat};
 use crate::prefix::resolve_root;
 use crate::term;
-use crate::resolver::{LockfileMode, PlanAction, Request, UpgradePolicy};
+use crate::resolver::{lockfile_from_installed, LockfileMode, PlanAction, Request, UpgradePolicy};
 use crate::storage::{InstalledDb, Lockfile};
 use crate::transaction::{Transaction, TransactionType};
 use crate::{ensure_layout, load_packages_from_dir, resolve, resolve_remove, stage_plan};
@@ -23,6 +23,11 @@ pub const EXIT_RESOLVER: i32 = 1;
 pub const EXIT_EXEC: i32 = 2;
 /// Exit code: usage error, I/O error, or other.
 pub const EXIT_OTHER: i32 = 3;
+
+/// Max width for the name column in human `status` / `search` tables (truncate beyond this).
+const HUMAN_TABLE_NAME_MAX: usize = 48;
+/// Max width for the version column in human `status` / `search` tables.
+const HUMAN_TABLE_VERSION_MAX: usize = 32;
 
 /// Userland package manager for ~/.local
 #[derive(Parser, Debug)]
@@ -73,6 +78,10 @@ pub struct GlobalOpts {
     /// When to use colored output: auto (TTY and no NO_COLOR), never, or always
     #[arg(long, default_value = "auto", value_name = "WHEN")]
     pub color: ColorModeArg,
+
+    /// When a sic package has the same name as a system package: warn, error (abort), or ignore
+    #[arg(long, default_value = "warn", value_name = "POLICY", env = "SIC_SHADOWING")]
+    pub shadowing: ShadowingPolicyArg,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -176,6 +185,29 @@ impl From<OutputFormatArg> for OutputFormat {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ShadowingPolicyArg {
+    Warn,
+    Error,
+    Ignore,
+}
+
+impl std::str::FromStr for ShadowingPolicyArg {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "warn" => Ok(ShadowingPolicyArg::Warn),
+            "error" => Ok(ShadowingPolicyArg::Error),
+            "ignore" => Ok(ShadowingPolicyArg::Ignore),
+            _ => Err(format!(
+                "expected 'warn', 'error', or 'ignore', got '{}'",
+                s
+            )),
+        }
+    }
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Install package(s) by name
@@ -222,6 +254,13 @@ pub enum Command {
         #[arg()]
         pattern: Option<String>,
     },
+
+    /// Show manifest metadata for a package from the packages dir
+    Info {
+        /// Package name
+        #[arg(required = true)]
+        name: String,
+    },
 }
 
 /// Resolves prefix: global --prefix or resolve_root().
@@ -244,19 +283,64 @@ pub fn resolve_packages_dir(global: &GlobalOpts, prefix: &Path) -> PathBuf {
     PathBuf::from("packages")
 }
 
-/// Emits a warning to stderr for each sic package in the plan that shadows a system package (same name).
-pub fn emit_shadowing_warnings(plan: &Plan, system: &SystemPackages) {
+/// Writes `sic.lock` from the current install DB and package catalog. Used after a successful install or upgrade.
+fn write_lockfile_after_mutation(
+    prefix: &Path,
+    global: &GlobalOpts,
+    available: &AvailablePackages,
+) -> Result<(), String> {
+    let installed = InstalledDb::load(prefix)
+        .map_err(|e| format!("failed to load installed.toml for lockfile: {}", e))?;
+    let lf = lockfile_from_installed(&installed, available);
+    let path = lockfile_write_path(prefix, global.lockfile.as_ref());
+    lf.write(&path)
+        .map_err(|e| format!("failed to write lockfile {}: {}", path.display(), e))
+}
+
+/// Applies shadowing policy for steps that install/upgrade a sic package whose name exists on the system.
+/// Returns `Some(EXIT_OTHER)` when policy is `error` and any such shadowing occurs.
+pub fn apply_shadowing_policy(
+    plan: &Plan,
+    system: &SystemPackages,
+    policy: ShadowingPolicyArg,
+    use_color_stderr: bool,
+) -> Option<i32> {
+    if matches!(policy, ShadowingPolicyArg::Ignore) {
+        return None;
+    }
+    let mut any = false;
+    let mut stderr = std::io::stderr();
     for step in &plan.steps {
         if step.action == PlanAction::Remove {
             continue;
         }
-        if system.get(&step.name).is_some() {
-            eprintln!(
-                "sic: warning: sic package {} shadows system package {}; may affect ABI",
-                step.name.as_str(),
-                step.name.as_str(),
-            );
+        if system.get(&step.name).is_none() {
+            continue;
         }
+        any = true;
+        let detail = format!(
+            "sic package {} shadows system package {}; may affect ABI",
+            step.name.as_str(),
+            step.name.as_str(),
+        );
+        match policy {
+            ShadowingPolicyArg::Ignore => {}
+            ShadowingPolicyArg::Warn => {
+                eprintln!("sic: warning: {}", detail);
+            }
+            ShadowingPolicyArg::Error => {
+                let _ = term::write_error(
+                    &mut stderr,
+                    use_color_stderr,
+                    &format!("sic: error: {}", detail),
+                );
+            }
+        }
+    }
+    if matches!(policy, ShadowingPolicyArg::Error) && any {
+        Some(EXIT_OTHER)
+    } else {
+        None
     }
 }
 
@@ -342,7 +426,14 @@ pub fn run_install(
                 return EXIT_RESOLVER;
             }
         };
-        emit_shadowing_warnings(&plan, &system);
+        if let Some(code) = apply_shadowing_policy(
+            &plan,
+            &system,
+            global.shadowing.clone(),
+            use_color_stderr,
+        ) {
+            return code;
+        }
         if global.dry_run {
             print_plan(&plan, output_fmt);
             continue;
@@ -366,6 +457,14 @@ pub fn run_install(
                     &format!("Installed {} {}", step.name.as_str(), step.version.as_str()),
                 );
             }
+        }
+        if let Err(msg) = write_lockfile_after_mutation(prefix, global, &available) {
+            let _ = term::write_error(
+                &mut std::io::stderr(),
+                use_color_stderr,
+                &format!("sic: {}", msg),
+            );
+            return EXIT_OTHER;
         }
     }
     EXIT_OK
@@ -453,7 +552,14 @@ pub fn run_upgrade(global: &GlobalOpts, prefix: &Path, name: Option<&str>) -> i3
             return EXIT_RESOLVER;
         }
     };
-    emit_shadowing_warnings(&plan, &system);
+    if let Some(code) = apply_shadowing_policy(
+        &plan,
+        &system,
+        global.shadowing.clone(),
+        use_color_stderr,
+    ) {
+        return code;
+    }
     if global.dry_run {
         print_plan(&plan, output_fmt);
         return EXIT_OK;
@@ -474,6 +580,14 @@ pub fn run_upgrade(global: &GlobalOpts, prefix: &Path, name: Option<&str>) -> i3
                 &format!("Upgraded {} to {}", step.name.as_str(), step.version.as_str()),
             );
         }
+    }
+    if let Err(msg) = write_lockfile_after_mutation(prefix, global, &available) {
+        let _ = term::write_error(
+            &mut std::io::stderr(),
+            use_color_stderr,
+            &format!("sic: {}", msg),
+        );
+        return EXIT_OTHER;
     }
     EXIT_OK
 }
@@ -700,21 +814,66 @@ pub fn run_status(global: &GlobalOpts, prefix: &Path) -> i32 {
             }
         }
     } else {
-        for e in entries {
-            if let Some(ref lf) = lockfile_opt {
-                let (status, locked_ver) = status_lockfile_info(e, lf);
-                let suffix = match status {
-                    LockfileStatus::Match => format!("\t(locked {})", locked_ver.unwrap().as_str()),
-                    LockfileStatus::Mismatch => format!(
-                        "\tlocked {}, installed {}",
-                        locked_ver.unwrap().as_str(),
-                        e.version.as_str()
-                    ),
-                    LockfileStatus::NotInLockfile => "\t(not in lockfile)".to_string(),
-                };
-                println!("{}\t{}{}", e.name.as_str(), e.version.as_str(), suffix);
-            } else {
-                println!("{}\t{}", e.name.as_str(), e.version.as_str());
+        if let Some(ref lf) = lockfile_opt {
+            let rows: Vec<(String, String, String)> = entries
+                .iter()
+                .map(|e| {
+                    let (status, locked_ver) = status_lockfile_info(e, lf);
+                    let suffix = match status {
+                        LockfileStatus::Match => format!("(locked {})", locked_ver.unwrap().as_str()),
+                        LockfileStatus::Mismatch => format!(
+                            "locked {}, installed {}",
+                            locked_ver.unwrap().as_str(),
+                            e.version.as_str()
+                        ),
+                        LockfileStatus::NotInLockfile => "(not in lockfile)".to_string(),
+                    };
+                    (
+                        e.name.as_str().to_string(),
+                        e.version.as_str().to_string(),
+                        suffix,
+                    )
+                })
+                .collect();
+            let max_name = rows
+                .iter()
+                .map(|(n, _, _)| n.chars().count())
+                .max()
+                .unwrap_or(0)
+                .clamp(1, HUMAN_TABLE_NAME_MAX);
+            let max_ver = rows
+                .iter()
+                .map(|(_, v, _)| v.chars().count())
+                .max()
+                .unwrap_or(0)
+                .clamp(1, HUMAN_TABLE_VERSION_MAX);
+            for (name, ver, suf) in rows {
+                println!(
+                    "{}  {}  {}",
+                    term::format_fixed_width(&name, max_name),
+                    term::format_fixed_width(&ver, max_ver),
+                    suf
+                );
+            }
+        } else {
+            let max_name = entries
+                .iter()
+                .map(|e| e.name.as_str().chars().count())
+                .max()
+                .unwrap_or(0)
+                .clamp(1, HUMAN_TABLE_NAME_MAX);
+            let max_ver = entries
+                .iter()
+                .map(|e| e.version.as_str().chars().count())
+                .max()
+                .unwrap_or(0)
+                .clamp(1, HUMAN_TABLE_VERSION_MAX);
+            for e in entries {
+                println!(
+                    "{}  {}",
+                    term::format_fixed_width(e.name.as_str(), max_name),
+                    term::format_fixed_width(e.version.as_str(), max_ver),
+                );
             }
         }
     }
@@ -814,8 +973,277 @@ pub fn run_search(
             }
         }
     } else {
+        let max_name = results
+            .iter()
+            .map(|(n, _)| n.as_str().chars().count())
+            .max()
+            .unwrap_or(0)
+            .clamp(1, HUMAN_TABLE_NAME_MAX);
+        let max_ver = results
+            .iter()
+            .map(|(_, v)| v.as_str().chars().count())
+            .max()
+            .unwrap_or(0)
+            .clamp(1, HUMAN_TABLE_VERSION_MAX);
         for (name, version) in &results {
-            println!("{}\t{}", name.as_str(), version.as_str());
+            println!(
+                "{}  {}",
+                term::format_fixed_width(name.as_str(), max_name),
+                term::format_fixed_width(version.as_str(), max_ver),
+            );
+        }
+    }
+    EXIT_OK
+}
+
+fn manifest_to_json_value(m: &crate::Manifest) -> serde_json::Value {
+    serde_json::json!({
+        "name": m.name.as_str(),
+        "version": m.version.as_str(),
+        "revision": m.revision,
+        "source": {
+            "type": m.source.type_name,
+            "url": m.source.url,
+            "hash": m.source.hash.to_string(),
+        },
+        "depends": m.depends.iter().map(|d| d.to_string()).collect::<Vec<_>>(),
+        "depends_any": m.depends_any.iter().map(|g| g.iter().map(|d| d.to_string()).collect::<Vec<_>>()).collect::<Vec<_>>(),
+        "recommends": m.recommends.iter().map(|d| d.to_string()).collect::<Vec<_>>(),
+        "conflicts": m.conflicts.iter().map(|p| p.as_str()).collect::<Vec<_>>(),
+        "provides": m.provides,
+        "files": m.files,
+        "commands": m.commands,
+    })
+}
+
+/// Shows manifest metadata for one package (all versions present in the packages dir).
+pub fn run_info(global: &GlobalOpts, prefix: &Path, name: &str) -> i32 {
+    let use_color_stderr = global.color.use_color_stderr();
+    let output_fmt: OutputFormat = global.output.clone().into();
+    let packages_dir = resolve_packages_dir(global, prefix);
+    let packages = match load_packages_from_dir(&packages_dir) {
+        Ok(m) => m,
+        Err(e) => {
+            let _ = term::write_error(
+                &mut std::io::stderr(),
+                use_color_stderr,
+                &format!("sic: failed to read packages from {}: {}", packages_dir.display(), e),
+            );
+            return EXIT_OTHER;
+        }
+    };
+    if packages.is_empty() {
+        let _ = term::write_error(
+            &mut std::io::stderr(),
+            use_color_stderr,
+            &format!("sic: no packages found in {}", packages_dir.display()),
+        );
+        return EXIT_OTHER;
+    }
+    let pkg_name = match crate::PackageName::new(name) {
+        Ok(n) => n,
+        Err(_) => {
+            let _ = term::write_error(
+                &mut std::io::stderr(),
+                use_color_stderr,
+                &format!("sic: invalid package name: {}", name),
+            );
+            return EXIT_OTHER;
+        }
+    };
+    let available = AvailablePackages::from_packages(packages);
+    let Some(vers) = available.get_versions(&pkg_name) else {
+        let _ = term::write_error(
+            &mut std::io::stderr(),
+            use_color_stderr,
+            &format!(
+                "sic: no package named '{}' under {}",
+                name,
+                packages_dir.display()
+            ),
+        );
+        return EXIT_OTHER;
+    };
+
+    if output_fmt == OutputFormat::Json {
+        let list: Vec<serde_json::Value> = vers.iter().map(manifest_to_json_value).collect();
+        let root = serde_json::json!({
+            "name": pkg_name.as_str(),
+            "versions": list,
+        });
+        match serde_json::to_string_pretty(&root) {
+            Ok(s) => println!("{}", s),
+            Err(e) => {
+                let _ = term::write_error(
+                    &mut std::io::stderr(),
+                    use_color_stderr,
+                    &format!("sic: {}", e),
+                );
+                return EXIT_OTHER;
+            }
+        }
+    } else if output_fmt == OutputFormat::Toml {
+        let list: Vec<toml::Value> = vers
+            .iter()
+            .map(|m| {
+                let mut t = toml::map::Map::new();
+                t.insert("version".to_string(), toml::Value::String(m.version.as_str().to_string()));
+                t.insert("revision".to_string(), toml::Value::Integer(m.revision as i64));
+                let mut src = toml::map::Map::new();
+                src.insert("type".to_string(), toml::Value::String(m.source.type_name.clone()));
+                src.insert("url".to_string(), toml::Value::String(m.source.url.clone()));
+                src.insert("hash".to_string(), toml::Value::String(m.source.hash.to_string()));
+                t.insert("source".to_string(), toml::Value::Table(src));
+                t.insert(
+                    "depends".to_string(),
+                    toml::Value::Array(
+                        m.depends
+                            .iter()
+                            .map(|d| toml::Value::String(d.to_string()))
+                            .collect(),
+                    ),
+                );
+                t.insert(
+                    "recommends".to_string(),
+                    toml::Value::Array(
+                        m.recommends
+                            .iter()
+                            .map(|d| toml::Value::String(d.to_string()))
+                            .collect(),
+                    ),
+                );
+                t.insert(
+                    "conflicts".to_string(),
+                    toml::Value::Array(
+                        m.conflicts
+                            .iter()
+                            .map(|p| toml::Value::String(p.as_str().to_string()))
+                            .collect(),
+                    ),
+                );
+                t.insert(
+                    "provides".to_string(),
+                    toml::Value::Array(
+                        m.provides
+                            .iter()
+                            .map(|s| toml::Value::String(s.clone()))
+                            .collect(),
+                    ),
+                );
+                t.insert(
+                    "files".to_string(),
+                    toml::Value::Array(
+                        m.files
+                            .iter()
+                            .map(|s| toml::Value::String(s.clone()))
+                            .collect(),
+                    ),
+                );
+                t.insert(
+                    "commands".to_string(),
+                    toml::Value::Array(
+                        m.commands
+                            .iter()
+                            .map(|s| toml::Value::String(s.clone()))
+                            .collect(),
+                    ),
+                );
+                toml::Value::Table(t)
+            })
+            .collect();
+        let root = toml::map::Map::from_iter([
+            ("name".to_string(), toml::Value::String(pkg_name.as_str().to_string())),
+            ("versions".to_string(), toml::Value::Array(list)),
+        ]);
+        match toml::to_string_pretty(&toml::Value::Table(root)) {
+            Ok(s) => println!("{}", s),
+            Err(e) => {
+                let _ = term::write_error(
+                    &mut std::io::stderr(),
+                    use_color_stderr,
+                    &format!("sic: {}", e),
+                );
+                return EXIT_OTHER;
+            }
+        }
+    } else {
+        println!(
+            "Package '{}' — {} version(s) in {}",
+            pkg_name.as_str(),
+            vers.len(),
+            packages_dir.display()
+        );
+        for m in vers {
+            println!();
+            println!(
+                "--- {} {} (revision {}) ---",
+                m.name.as_str(),
+                m.version.as_str(),
+                m.revision
+            );
+            println!("  source.type = {}", m.source.type_name);
+            println!("  source.url = {}", m.source.url);
+            println!("  source.hash = {}", m.source.hash);
+            if !m.depends.is_empty() {
+                println!(
+                    "  depends = [{}]",
+                    m.depends
+                        .iter()
+                        .map(|d| d.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            } else {
+                println!("  depends = []");
+            }
+            if !m.depends_any.is_empty() {
+                for (i, g) in m.depends_any.iter().enumerate() {
+                    let s = g
+                        .iter()
+                        .map(|d| d.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" | ");
+                    println!("  depends_any[{}] = {}", i, s);
+                }
+            }
+            if !m.recommends.is_empty() {
+                println!(
+                    "  recommends = [{}]",
+                    m.recommends
+                        .iter()
+                        .map(|d| d.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            if !m.conflicts.is_empty() {
+                println!(
+                    "  conflicts = [{}]",
+                    m.conflicts
+                        .iter()
+                        .map(|p| p.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            if !m.provides.is_empty() {
+                println!(
+                    "  provides = [{}]",
+                    m.provides.join(", ")
+                );
+            }
+            if !m.files.is_empty() {
+                println!(
+                    "  files = [{}]",
+                    m.files.join(", ")
+                );
+            }
+            if !m.commands.is_empty() {
+                println!(
+                    "  commands = [{}]",
+                    m.commands.join(", ")
+                );
+            }
         }
     }
     EXIT_OK
@@ -1040,6 +1468,14 @@ pub fn run_resolve_only(global: &GlobalOpts, prefix: &Path, name: Option<&str>) 
             return EXIT_RESOLVER;
         }
     };
+    if let Some(code) = apply_shadowing_policy(
+        &plan,
+        &system,
+        global.shadowing.clone(),
+        use_color_stderr,
+    ) {
+        return code;
+    }
     print_plan(&plan, output_fmt);
     EXIT_OK
 }
@@ -1127,4 +1563,95 @@ fn run_plan(
         .map_err(|e| crate::TransactionError::msg(e.to_string()))?;
     tx.commit(prefix)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod shadowing_policy_tests {
+    use super::*;
+    use crate::resolver::PlanStep;
+    use crate::source::{Source, SourceHash};
+    use crate::version::Version;
+    use crate::PackageName;
+
+    fn install_step(name: &str) -> PlanStep {
+        PlanStep {
+            name: PackageName::new(name).unwrap(),
+            version: Version::new("1.0").unwrap(),
+            revision: 0,
+            source: Source {
+                type_name: "tarball".to_string(),
+                url: "https://example.com/x.tar.gz".to_string(),
+                hash: SourceHash::parse(
+                    "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                )
+                .unwrap(),
+            },
+            files: vec![],
+            commands: vec![],
+            action: PlanAction::Install,
+        }
+    }
+
+    #[test]
+    fn ignore_returns_none_even_when_shadowing() {
+        let plan = Plan {
+            steps: vec![install_step("curl")],
+            satisfied_by_system: vec![],
+        };
+        let system = SystemPackages::from_map([("curl", "7.0")]);
+        assert_eq!(
+            apply_shadowing_policy(&plan, &system, ShadowingPolicyArg::Ignore, false),
+            None
+        );
+    }
+
+    #[test]
+    fn error_returns_exit_other_when_shadowing() {
+        let plan = Plan {
+            steps: vec![install_step("curl")],
+            satisfied_by_system: vec![],
+        };
+        let system = SystemPackages::from_map([("curl", "7.0")]);
+        assert_eq!(
+            apply_shadowing_policy(&plan, &system, ShadowingPolicyArg::Error, false),
+            Some(EXIT_OTHER)
+        );
+    }
+
+    #[test]
+    fn warn_returns_none() {
+        let plan = Plan {
+            steps: vec![install_step("curl")],
+            satisfied_by_system: vec![],
+        };
+        let system = SystemPackages::from_map([("curl", "7.0")]);
+        assert_eq!(
+            apply_shadowing_policy(&plan, &system, ShadowingPolicyArg::Warn, false),
+            None
+        );
+    }
+
+    #[test]
+    fn remove_steps_skipped_for_shadowing() {
+        let mut step = install_step("curl");
+        step.action = PlanAction::Remove;
+        let plan = Plan {
+            steps: vec![step],
+            satisfied_by_system: vec![],
+        };
+        let system = SystemPackages::from_map([("curl", "7.0")]);
+        assert_eq!(
+            apply_shadowing_policy(&plan, &system, ShadowingPolicyArg::Error, false),
+            None
+        );
+    }
+
+    #[test]
+    fn shadowing_policy_from_str() {
+        assert_eq!(
+            "warn".parse::<ShadowingPolicyArg>().unwrap(),
+            ShadowingPolicyArg::Warn
+        );
+        assert!("nope".parse::<ShadowingPolicyArg>().is_err());
+    }
 }

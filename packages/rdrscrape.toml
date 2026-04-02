@@ -1,0 +1,6 @@
+# CLI utility for scraping books from websites into epub, md, html, etc.
+[sic]
+name = "rdrscrape"
+version = "0.1.0"
+source = { type = "tarball", url = "https://github.com/huffs-projects/rdrscrape/archive/refs/tags/0.1.0.tar.gz", hash = "sha256:4e7179522826874a0d31ad278cdb10e9850e17449b9c41fc70cca94ddc249039" }
+depends = []

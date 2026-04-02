@@ -1,0 +1,6 @@
+# Encrypted CLI vault for notes, configs, keys, and files
+[sic]
+name = "dredge"
+version = "0.9.4"
+source = { type = "tarball", url = "https://github.com/DeprecatedLuar/dredge/archive/refs/tags/v0.9.4.tar.gz", hash = "sha256:b826ba184bbb09c47d49939b1f5761d69e529f8d146205be129b7ded6ae48174" }
+depends = []

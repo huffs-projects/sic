@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 const DIRS: &[&str] = &[
     "pkgs",
     "bin",
+    "share",
+    "share/man",
     "var",
     "var/cache",
     "var/backups",

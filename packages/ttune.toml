@@ -1,0 +1,6 @@
+# A guitar tuner for your terminal
+[sic]
+name = "ttune"
+version = "0.9.0"
+source = { type = "tarball", url = "https://github.com/SteveMCWin/ttune/archive/refs/tags/v0.9.0.tar.gz", hash = "sha256:2e35b22eb8fbb6d00947bd531efad6a6b348d54406ae8ddbbee38eef1573b044" }
+depends = []

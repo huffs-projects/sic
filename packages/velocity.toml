@@ -1,0 +1,6 @@
+# Small TUI app launcher
+[sic]
+name = "velocity"
+version = "0.0.0"
+source = { type = "tarball", url = "https://github.com/huffs-projects/velocity/archive/refs/heads/main.tar.gz", hash = "sha256:2d20e0caf2fcf2371d198849da477e00809aa2f16f5200b99ec06a5b6276bed8" }
+depends = []

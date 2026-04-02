@@ -229,6 +229,8 @@ impl Transaction {
 
         for step in &self.plan.steps {
             let dir_name = pkg_dir_name(step)?;
+            let install_path_str = format!("pkgs/{}", dir_name);
+            remove_prefix_symlinks_for_install(prefix, &install_path_str)?;
             let install_path = prefix.join("pkgs").join(&dir_name);
             if install_path.exists() {
                 remove_dir_all_if_exists(&install_path)?;
@@ -294,6 +296,204 @@ fn bin_symlinks_pointing_to(prefix: &Path, install_path: &str) -> Result<Vec<Pat
     Ok(out)
 }
 
+/// Relative path from directory `from_dir` to absolute path `to` (same semantics as GNU `realpath --relative-to`).
+fn path_relative_from_to(from_dir: &Path, to: &Path) -> PathBuf {
+    let from: Vec<_> = from_dir.components().collect();
+    let to: Vec<_> = to.components().collect();
+    let mut i = 0usize;
+    while i < from.len() && i < to.len() && from[i] == to[i] {
+        i += 1;
+    }
+    let mut out = PathBuf::new();
+    for _ in i..from.len() {
+        out.push("..");
+    }
+    for c in to.iter().skip(i) {
+        out.push(c);
+    }
+    if out.as_os_str().is_empty() {
+        PathBuf::from(".")
+    } else {
+        out
+    }
+}
+
+/// Maximum depth when scanning prefix/share/man for symlinks.
+const MAN_SYMLINK_WALK_MAX_DEPTH: u32 = 256;
+
+/// Returns paths under prefix/share/man/ that are symlinks whose target lies under prefix/install_path.
+fn man_symlinks_pointing_to(
+    prefix: &Path,
+    install_path: &str,
+    scan_dir: &Path,
+    depth: u32,
+) -> Result<Vec<PathBuf>, TransactionError> {
+    if depth >= MAN_SYMLINK_WALK_MAX_DEPTH {
+        return Err(TransactionError(
+            "share/man tree too deep when scanning symlinks".to_string(),
+        ));
+    }
+    let pkg_abs = prefix.join(install_path);
+    let mut out = Vec::new();
+    if !scan_dir.is_dir() {
+        return Ok(out);
+    }
+    for entry in fs::read_dir(scan_dir).map_err(TransactionError::io_err)? {
+        let entry = entry.map_err(TransactionError::io_err)?;
+        let path = entry.path();
+        let meta = fs::symlink_metadata(&path).map_err(TransactionError::io_err)?;
+        if meta.is_dir() && !meta.is_symlink() {
+            out.extend(man_symlinks_pointing_to(
+                prefix,
+                install_path,
+                &path,
+                depth + 1,
+            )?);
+            continue;
+        }
+        if !meta.is_symlink() {
+            continue;
+        }
+        let target = fs::read_link(&path).map_err(TransactionError::io_err)?;
+        let resolved = if target.is_absolute() {
+            target
+        } else {
+            path.parent().unwrap_or(scan_dir).join(&target)
+        };
+        if resolved.starts_with(&pkg_abs) {
+            out.push(path);
+        }
+    }
+    Ok(out)
+}
+
+/// Removes symlinks under `prefix/bin` and `prefix/share/man` that point into `prefix/install_path`.
+fn remove_prefix_symlinks_for_install(prefix: &Path, install_path: &str) -> Result<(), TransactionError> {
+    for link_path in bin_symlinks_pointing_to(prefix, install_path)? {
+        if fs::symlink_metadata(&link_path).is_ok() {
+            fs::remove_file(&link_path).map_err(TransactionError::io_err)?;
+        }
+    }
+    let man_root = prefix.join("share/man");
+    for link_path in man_symlinks_pointing_to(prefix, install_path, &man_root, 0)? {
+        if fs::symlink_metadata(&link_path).is_ok() {
+            fs::remove_file(&link_path).map_err(TransactionError::io_err)?;
+        }
+    }
+    Ok(())
+}
+
+/// Creates symlinks under prefix/share/man mirroring files in pkgs/<pkg>/share/man.
+#[cfg(unix)]
+fn link_man_pages_for_pkg(prefix: &Path, pkg_dir_name: &str) -> Result<(), TransactionError> {
+    let pkg_man = prefix.join("pkgs").join(pkg_dir_name).join("share/man");
+    if !pkg_man.is_dir() {
+        return Ok(());
+    }
+    let dest_root = prefix.join("share/man");
+    fs::create_dir_all(&dest_root).map_err(TransactionError::io_err)?;
+    link_man_pages_recursive(&pkg_man, &pkg_man, dest_root, 0)
+}
+
+#[cfg(unix)]
+fn link_man_pages_recursive(
+    pkg_man_root: &Path,
+    current: &Path,
+    dest_root: PathBuf,
+    depth: u32,
+) -> Result<(), TransactionError> {
+    if depth >= COPY_TREE_MAX_DEPTH {
+        return Err(TransactionError(
+            "package share/man tree too deep when linking man pages".to_string(),
+        ));
+    }
+    for entry in fs::read_dir(current).map_err(TransactionError::io_err)? {
+        let entry = entry.map_err(TransactionError::io_err)?;
+        let path = entry.path();
+        let meta = fs::symlink_metadata(&path).map_err(TransactionError::io_err)?;
+        let rel = path
+            .strip_prefix(pkg_man_root)
+            .map_err(|e| TransactionError(format!("man strip_prefix: {}", e)))?;
+        if meta.is_dir() && !meta.is_symlink() {
+            fs::create_dir_all(dest_root.join(rel)).map_err(TransactionError::io_err)?;
+            link_man_pages_recursive(pkg_man_root, &path, dest_root.clone(), depth + 1)?;
+        } else {
+            let link_path = dest_root.join(rel);
+            if let Some(parent) = link_path.parent() {
+                fs::create_dir_all(parent).map_err(TransactionError::io_err)?;
+            }
+            let rel_target = path_relative_from_to(
+                link_path
+                    .parent()
+                    .ok_or_else(|| TransactionError("man link has no parent".to_string()))?,
+                &path,
+            );
+            if link_path.symlink_metadata().is_ok() {
+                fs::remove_file(&link_path).map_err(TransactionError::io_err)?;
+            }
+            std::os::unix::fs::symlink(&rel_target, &link_path)
+                .map_err(|e| TransactionError(format!("man symlink: {}", e)))?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn link_man_pages_for_pkg(_prefix: &Path, _pkg_dir_name: &str) -> Result<(), TransactionError> {
+    Ok(())
+}
+
+/// Creates symlinks under `prefix/bin/` for each command name, pointing at `pkgs/<pkg>/bin/<command>`.
+#[cfg(unix)]
+fn link_bin_commands_for_pkg(
+    prefix: &Path,
+    pkg_dir_name: &str,
+    commands: &[String],
+) -> Result<(), TransactionError> {
+    let bin_dir = prefix.join("bin");
+    fs::create_dir_all(&bin_dir).map_err(TransactionError::io_err)?;
+    let pkg_root = prefix.join("pkgs").join(pkg_dir_name);
+    for cmd in commands {
+        let cmd = cmd.trim();
+        if cmd.is_empty() {
+            continue;
+        }
+        let target_in_pkg = pkg_root.join("bin").join(cmd);
+        let meta = fs::symlink_metadata(&target_in_pkg).map_err(TransactionError::io_err)?;
+        if !meta.is_file() && !meta.is_symlink() {
+            return Err(TransactionError(format!(
+                "command {:?} must refer to a file under bin/ in the package",
+                cmd
+            )));
+        }
+        let link_path = bin_dir.join(cmd);
+        if let Some(parent) = link_path.parent() {
+            fs::create_dir_all(parent).map_err(TransactionError::io_err)?;
+        }
+        if link_path.symlink_metadata().is_ok() {
+            fs::remove_file(&link_path).map_err(TransactionError::io_err)?;
+        }
+        let rel_target = path_relative_from_to(
+            link_path
+                .parent()
+                .ok_or_else(|| TransactionError("bin link has no parent".to_string()))?,
+            &target_in_pkg,
+        );
+        std::os::unix::fs::symlink(&rel_target, &link_path)
+            .map_err(|e| TransactionError(format!("bin symlink: {}", e)))?;
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn link_bin_commands_for_pkg(
+    _prefix: &Path,
+    _pkg_dir_name: &str,
+    _commands: &[String],
+) -> Result<(), TransactionError> {
+    Ok(())
+}
+
 /// Backs up pkgs/<pkg_dir_name> and bin symlinks pointing to it; then removes bin symlinks and pkg dir.
 fn backup_and_remove_pkg(
     prefix: &Path,
@@ -330,6 +530,31 @@ fn backup_and_remove_pkg(
         }
         remove_dir_all_if_exists(link_path)?;
     }
+
+    let man_root = prefix.join("share/man");
+    let man_links = man_symlinks_pointing_to(prefix, install_path, &man_root, 0)?;
+    for link_path in &man_links {
+        let rel = link_path.strip_prefix(prefix).map_err(|e| {
+            TransactionError(format!("man symlink strip prefix: {}", e))
+        })?;
+        let backup_link = backup.join(rel);
+        if let Some(p) = backup_link.parent() {
+            fs::create_dir_all(p).map_err(TransactionError::io_err)?;
+        }
+        #[cfg(unix)]
+        {
+            let target = fs::read_link(link_path).map_err(TransactionError::io_err)?;
+            std::os::unix::fs::symlink(&target, &backup_link)
+                .map_err(|e| TransactionError(format!("backup man symlink: {}", e)))?;
+            fs::remove_file(link_path).map_err(TransactionError::io_err)?;
+        }
+        #[cfg(not(unix))]
+        {
+            fs::copy(link_path, &backup_link).map_err(TransactionError::io_err)?;
+            fs::remove_file(link_path).map_err(TransactionError::io_err)?;
+        }
+    }
+
     remove_dir_all_if_exists(&pkg_abs)?;
     Ok(())
 }
@@ -403,6 +628,8 @@ fn apply_step(
     let dest_pkg = prefix.join("pkgs").join(&pkg_dir_name);
     fs::create_dir_all(&dest_pkg).map_err(TransactionError::io_err)?;
     copy_tree_with_backup_at_depth(&staging_pkg, &dest_pkg, prefix, backup, 0)?;
+    link_man_pages_for_pkg(prefix, &pkg_dir_name)?;
+    link_bin_commands_for_pkg(prefix, &pkg_dir_name, &step.commands)?;
     Ok(())
 }
 
@@ -640,6 +867,7 @@ mod tests {
                 hash: SourceHash::parse("sha256:deadbeef").unwrap(),
             },
             files: vec![],
+            commands: vec![],
             action: PlanAction::Install,
         }
     }
@@ -656,6 +884,7 @@ mod tests {
                     .unwrap(),
             },
             files: vec![],
+            commands: vec![],
             action: PlanAction::Remove,
         }
     }
@@ -708,6 +937,73 @@ mod tests {
         let log_path = transaction_log_path(prefix, tx.id);
         let content = fs::read_to_string(&log_path).unwrap();
         assert!(content.contains("committed"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn commit_creates_man_page_symlinks() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let prefix = tmp.path();
+        prefix::ensure_layout(prefix).unwrap();
+        let step = fake_plan_step("foo", "1.0");
+        let plan = Plan {
+            steps: vec![step],
+            satisfied_by_system: vec![],
+        };
+        let mut tx = Transaction::new(TransactionType::Install, plan, prefix).unwrap();
+        let staging = staging_path(prefix, tx.id);
+        let pkg_staging = staging.join("foo-1.0");
+        fs::create_dir_all(pkg_staging.join("share/man/man1")).unwrap();
+        fs::write(
+            pkg_staging.join("share/man/man1/foo.1"),
+            ".TH FOO 1",
+        )
+        .unwrap();
+
+        tx.commit(prefix).unwrap();
+
+        let in_pkg = prefix
+            .join("pkgs/foo-1.0/share/man/man1/foo.1");
+        assert!(in_pkg.is_file());
+        let man_link = prefix.join("share/man/man1/foo.1");
+        assert!(man_link.is_symlink(), "expected symlink under share/man");
+        let target = fs::read_link(&man_link).unwrap();
+        let resolved = man_link.parent().unwrap().join(&target);
+        assert_eq!(
+            fs::canonicalize(resolved).unwrap(),
+            fs::canonicalize(&in_pkg).unwrap()
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn commit_creates_bin_command_symlinks() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let prefix = tmp.path();
+        prefix::ensure_layout(prefix).unwrap();
+        let mut step = fake_plan_step("foo", "1.0");
+        step.commands = vec!["foo".to_string()];
+        let plan = Plan {
+            steps: vec![step],
+            satisfied_by_system: vec![],
+        };
+        let mut tx = Transaction::new(TransactionType::Install, plan, prefix).unwrap();
+        let staging = staging_path(prefix, tx.id);
+        let pkg_staging = staging.join("foo-1.0");
+        fs::create_dir_all(pkg_staging.join("bin")).unwrap();
+        fs::write(pkg_staging.join("bin/foo"), "binary").unwrap();
+
+        tx.commit(prefix).unwrap();
+
+        let installed_bin = prefix.join("pkgs/foo-1.0/bin/foo");
+        let bin_link = prefix.join("bin/foo");
+        assert!(bin_link.is_symlink(), "expected symlink under bin");
+        let target = fs::read_link(&bin_link).unwrap();
+        let resolved = bin_link.parent().unwrap().join(&target);
+        assert_eq!(
+            fs::canonicalize(resolved).unwrap(),
+            fs::canonicalize(&installed_bin).unwrap()
+        );
     }
 
     #[test]
@@ -937,6 +1233,7 @@ mod tests {
                 hash: SourceHash::parse("sha256:deadbeef").unwrap(),
             },
             files: vec![],
+            commands: vec![],
             action: PlanAction::Upgrade,
         };
         let plan = Plan {

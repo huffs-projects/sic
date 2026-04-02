@@ -303,7 +303,8 @@ impl std::error::Error for FailureSerializeError {}
 
 /// Emit failure in the requested format to the given writer.
 /// CLI will call this with format from env or flag (Phase 11).
-/// When format is Human and use_color is true, summary line is red and "Suggested:" line is yellow.
+/// When format is Human and use_color is true, the summary is prefixed with `error:` (red) and the
+/// action line uses `hint:` (yellow), so hierarchy is visible without relying on color alone.
 pub fn emit_failure(
     f: &ResolverFailure,
     format: OutputFormat,
@@ -313,9 +314,11 @@ pub fn emit_failure(
     match format {
         OutputFormat::Human => {
             if use_color {
-                let (summary, middle, suggested) = format_human_parts(f);
-                let summary_styled = format!("{}", summary.red());
-                let suggested_styled = format!("{}", suggested.yellow());
+                let (summary, middle, _suggested) = format_human_parts(f);
+                let summary_line = format!("error: {}", summary);
+                let summary_styled = format!("{}", summary_line.red());
+                let hint_line = format!("hint: {}\n", f.suggested_action());
+                let suggested_styled = format!("{}", hint_line.yellow());
                 let out = if middle.is_empty() {
                     format!("{}\n{}", summary_styled, suggested_styled)
                 } else {
@@ -422,6 +425,20 @@ mod tests {
         assert!(human.contains("12.0"));
         assert!(human.contains("Suggested:"));
         assert!(human.contains("downgrade request or wait for newer release"));
+    }
+
+    #[test]
+    fn emit_failure_human_colored_uses_error_and_hint_prefixes() {
+        let f = ResolverFailure::conflict("a", Some(vec!["b".to_string()]));
+        let mut out = Vec::new();
+        emit_failure(&f, OutputFormat::Human, &mut out, true).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(s.contains("error:"));
+        assert!(s.contains("hint:"));
+        assert!(
+            !s.contains("Suggested:"),
+            "colored human output should use hint: not Suggested:"
+        );
     }
 
     #[test]

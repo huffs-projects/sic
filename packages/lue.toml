@@ -1,0 +1,6 @@
+# Terminal eBook Reader with Audiobook-Quality Text-to-Speech
+[sic]
+name = "lue"
+version = "0.4.0"
+source = { type = "tarball", url = "https://github.com/superstarryeyes/lue/archive/refs/tags/v0.4.0.tar.gz", hash = "sha256:f8d5f50715337cde1bd99077308082341b40405ff77f28cf4a64a33aa60186f3" }
+depends = []

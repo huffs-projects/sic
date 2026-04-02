@@ -1,0 +1,6 @@
+# A simple and easy to use Wikipedia Text User Interface
+[sic]
+name = "wiki-tui"
+version = "0.9.2"
+source = { type = "tarball", url = "https://github.com/Builditluc/wiki-tui/archive/refs/tags/v0.9.2.tar.gz", hash = "sha256:4f51547c0597ee9d6be9e946a612bfc052f8addd59b01f2bd599b31c3b636004" }
+depends = []

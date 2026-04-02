@@ -1,0 +1,6 @@
+# Feature-rich terminal-based RSS/Atom feed reader
+[sic]
+name = "feedr"
+version = "0.5.0"
+source = { type = "tarball", url = "https://github.com/bahdotsh/feedr/archive/refs/tags/v0.5.0.tar.gz", hash = "sha256:217d80f3648f8128415eebb2921f64955081cd7f2ebcfe16ed8888d5b8c57759" }
+depends = []

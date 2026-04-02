@@ -1,0 +1,6 @@
+# Task manager with a Pomodoro timer
+[sic]
+name = "tsk"
+version = "1.0"
+source = { type = "tarball", url = "https://github.com/huffs-projects/tsk/archive/refs/tags/1.0.tar.gz", hash = "sha256:b190ac4efef7389c73e4e0299ffc43e01bb63cdf2d821fcb4fd172493da4593b" }
+depends = []

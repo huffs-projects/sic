@@ -1,7 +1,7 @@
 //! Resolver: in-memory dependency resolution from request + available packages + installed set.
 //!
 //! Produces a deterministic Plan (ordered install/upgrade steps) or Failure. No I/O; no lockfile
-//! or dpkg in this phase. Recommends are left for a later phase.
+//! or system packages in this phase. Recommends are left for a later phase.
 //! When system packages are provided (Phase 6), implicit deps can be satisfied by system.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -37,6 +37,8 @@ pub struct PlanStep {
     pub source: Source,
     /// Relative paths to install from the unpacked artifact (e.g. `bin/helix`, `share/helix/*`).
     pub files: Vec<String>,
+    /// Binary names for symlinks in `prefix/bin/` (see manifest `commands`).
+    pub commands: Vec<String>,
     pub action: PlanAction,
 }
 
@@ -53,7 +55,7 @@ pub enum PlanAction {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Plan {
     pub steps: Vec<PlanStep>,
-    /// Dependencies satisfied by system (e.g. dpkg) packages; never proposed for install.
+    /// Dependencies satisfied by system packages; never proposed for install.
     pub satisfied_by_system: Vec<(PackageName, Version)>,
 }
 
@@ -308,6 +310,7 @@ pub fn resolve_remove(
                 .unwrap(),
         },
         files: vec![],
+        commands: vec![],
         action: PlanAction::Remove,
     };
     Ok(Plan {
@@ -699,6 +702,7 @@ fn topological_plan(
             revision: manifest.revision,
             source: manifest.source.clone(),
             files: manifest.files.clone(),
+            commands: manifest.commands.clone(),
             action,
         });
     }
@@ -725,6 +729,34 @@ pub fn plan_to_lockfile(plan: &Plan) -> Lockfile {
             })
             .collect(),
     }
+}
+
+/// Builds a lockfile from the current installation and package catalog.
+/// Only includes packages whose exact version/revision appears in `available`.
+pub fn lockfile_from_installed(
+    installed: &InstalledDb,
+    available: &AvailablePackages,
+) -> Lockfile {
+    let mut packages: Vec<LockfilePackage> = Vec::new();
+    for e in installed.list_all() {
+        let Some(vers) = available.get_versions(&e.name) else {
+            continue;
+        };
+        let Some(m) = vers
+            .iter()
+            .find(|m| m.version == e.version && m.revision == e.revision)
+        else {
+            continue;
+        };
+        packages.push(LockfilePackage {
+            name: m.name.clone(),
+            version: m.version.clone(),
+            revision: m.revision,
+            source: m.source.clone(),
+        });
+    }
+    packages.sort_by(|a, b| a.name.cmp(&b.name));
+    Lockfile { packages }
 }
 
 #[cfg(test)]
@@ -757,6 +789,26 @@ mod tests {
             files: vec![],
             commands: vec![],
         }
+    }
+
+    #[test]
+    fn lockfile_from_installed_matches_catalog() {
+        use crate::storage::InstalledEntry;
+        let m = manifest_no_deps("foo", "1.0");
+        let available = AvailablePackages::from_packages(vec![m.clone()]);
+        let entry = InstalledEntry {
+            name: PackageName::new("foo").unwrap(),
+            version: Version::new("1.0").unwrap(),
+            revision: 0,
+            install_path: "pkgs/foo-1.0".to_string(),
+            files: vec![],
+            file_checksums: vec![],
+        };
+        let db = InstalledDb::from(vec![entry]);
+        let lf = lockfile_from_installed(&db, &available);
+        assert_eq!(lf.packages.len(), 1);
+        assert_eq!(lf.packages[0].name.as_str(), "foo");
+        assert_eq!(lf.packages[0].source.url, m.source.url);
     }
 
     #[test]
@@ -1156,7 +1208,7 @@ mod tests {
         assert_eq!(plan1.steps[0].version.as_str(), plan2.steps[0].version.as_str());
     }
 
-    // --- Phase 6: Debian / system packages tests ---
+    // --- Phase 6: system packages tests ---
 
     #[test]
     fn implicit_dep_satisfied_by_system_plan_has_only_requested() {

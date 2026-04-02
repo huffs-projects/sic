@@ -1,0 +1,252 @@
+.TH SIC 1 "March 2026" "sic 0.1.0" "User Commands"
+.SH NAME
+sic \- userland package manager for ~/.local
+.SH SYNOPSIS
+.B sic
+.RI [ global-options ]
+.I command
+.RI [ command-args ]
+.SH DESCRIPTION
+.B sic
+installs, upgrades, and removes packages under a user prefix without touching the system.
+On Unix it reads system package databases best-effort (for example dpkg, pacman, Alpine apk, Homebrew Cellar) to satisfy dependencies with system packages when possible.
+When no supported database is present or readable, the system package set is treated as empty and resolution uses only sic packages.
+.PP
+Add the sic bin directory to your
+.B PATH
+so installed binaries are available, for example:
+.PP
+.RS
+export PATH="$HOME/.local/sic/bin:$PATH"
+.RE
+.PP
+Use
+.B SIC_ROOT
+or
+.B \-\-prefix
+to choose a different installation root; add
+.B $SIC_ROOT/bin
+(or
+.BI prefix /bin\fR)
+to
+.BR PATH .
+The user is responsible for
+.B PATH
+order: put the sic bin directory first if sic-installed packages should take precedence over system ones.
+.SH COMMANDS
+.TP
+.BI sic install " name " [ names\&...]
+Resolve and install one or more packages by name.
+Uses package definitions from
+.B \-\-packages
+(default:
+.IR prefix /packages
+or
+.BR ./packages ).
+On success, writes
+.B sic.lock
+under the prefix (or to
+.B \-\-lockfile
+if set) to record installed packages that match the catalog.
+.TP
+.BI sic upgrade " [name]"
+Upgrade one named package, or omit
+.I name
+to upgrade all installed packages.
+On success, updates
+.B sic.lock
+the same way as
+.BR install .
+.TP
+.BI sic remove " name " [ names\&...]
+Remove installed packages.
+Fails if dependents exist unless
+.BR \-\-force .
+.TP
+.B sic status
+List installed packages with versions.
+Human-readable table by default; with
+.B \-\-output json
+or
+.B \-\-output toml
+for machine-readable output.
+When a lockfile is in use, human output shows locked vs installed; machine output includes
+.B lockfile_status
+(match, mismatch, not_in_lockfile) and optional
+.BR locked_version .
+.TP
+.BI sic resolve-only " [name]"
+Run the resolver only and print the plan; no fetch or commit.
+With an optional
+.IR name ,
+plan an install; without, plan an upgrade-all.
+.TP
+.B sic doctor
+Check prefix layout, lockfile vs installed state, and broken symlinks.
+.TP
+.BI sic search " [pattern]"
+List available packages from the packages directory (no install).
+Optional
+.I pattern
+filters to names containing the string (case-insensitive).
+.TP
+.BI sic info " name"
+Show manifest metadata for
+.I name
+from the packages directory (every catalogued version).
+Human-readable by default; use
+.B \-\-output json
+or
+.B \-\-output toml
+for machine-readable output.
+.SH GLOBAL OPTIONS
+.TP
+.BI \-\-prefix " PATH"
+Installation prefix (default:
+.B SIC_ROOT
+or
+.BR ~/.local/sic ).
+.TP
+.BI \-\-packages " DIR"
+Directory containing package definition files (default:
+.IR prefix /packages
+or
+.BR ./packages ).
+.TP
+.BI \-\-lockfile " PATH"
+Use this
+.B sic.lock
+for strict or flexible resolution (optional; otherwise
+.IR prefix /sic.lock
+may apply).
+.TP
+.BI \-\-lockfile-mode " MODE"
+.B strict
+or
+.BR flexible .
+Default is
+.BR strict .
+With
+.BR flexible ,
+allow upgrades that still satisfy constraints (e.g. for
+.BR upgrade ).
+.TP
+.BI \-\-output " FMT"
+Output format for failures and
+.BR status :
+.BR human ", " json ", or " toml
+(default
+.BR human ).
+.TP
+.B \-\-dry-run
+Only resolve and print the plan; do not fetch or commit.
+.TP
+.BR \-v ", " \-\-verbose
+Verbose resolver and fetch logging.
+.TP
+.BR \-y ", " \-\-yes
+Non-interactive: assume yes for prompts; suitable for scripts.
+.TP
+.BI \-\-color " WHEN"
+When to color output:
+.BR auto ", " never ", or " always
+(default
+.BR auto ).
+.TP
+.BI \-\-shadowing " POLICY"
+When a planned install or upgrade would provide a sic package whose name also exists in the detected system package set:
+.BR warn
+(print a warning to standard error; default),
+.BR error
+(abort with exit status 3), or
+.B ignore
+(silent). Same as environment variable
+.BR SIC_SHADOWING .
+.PP
+For
+.BR remove ", " \-f
+and
+.B \-\-force
+remove packages even if other packages depend on them (may leave broken dependencies).
+.SH LOCKFILE
+When
+.B sic.lock
+exists (under the prefix or via
+.BR \-\-lockfile ),
+resolution can be strict or flexible:
+.TP
+.B strict
+Only versions (and revisions) recorded in the lockfile are allowed.
+Use for reproducible installs.
+.TP
+.B flexible
+Allow upgrades that still satisfy constraints while respecting the lockfile.
+Use for
+.B upgrade
+workflows.
+.SH ENVIRONMENT
+.TP
+.B SIC_ROOT
+Default installation prefix when
+.B \-\-prefix
+is not set.
+.TP
+.B NO_COLOR
+When set, disables color for
+.B \-\-color auto
+(same idea as common CLI conventions).
+.TP
+.B SIC_SHADOWING
+Same values as
+.BR \-\-shadowing :
+.BR warn ", " error ", or " ignore
+(default when unset:
+.BR warn ).
+.SH FAILURE OUTPUT
+On resolver failure (unsatisfiable, conflict, cycle, not in lockfile, has dependents),
+.B sic
+prints a structured message to standard error.
+Use
+.B \-\-output json
+or
+.B \-\-output toml
+for machine-readable diagnostics.
+The message may include a suggested action (for example, remove dependents first or use
+.B \-\-force
+when removal is blocked by dependents).
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Resolver failure (unsatisfiable, conflict, cycle, not in lockfile, has dependents).
+.TP
+.B 2
+Fetch, stage, or commit failure.
+.TP
+.B 3
+Usage error, I/O error, or other failure (including
+.B \-\-shadowing error
+when the plan would shadow a system package).
+.SH FILES
+.TP
+.IB prefix /sic.lock
+Optional lockfile for pinned or constrained resolution.
+.TP
+.IB prefix /packages
+or
+.B ./packages
+Default package catalog (package definition files).
+.SH SEE ALSO
+.BR dpkg (1),
+.BR pacman (8),
+.BR apk (8),
+.BR brew (1)
+.SH AUTHOR
+See the project repository for contributor information.
+.SH COPYRIGHT
+Copyright \(co sic contributors.
+License GPLv3+: GNU GPL version 3 or later.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.

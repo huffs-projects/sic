@@ -1,0 +1,6 @@
+# Translate text to multiple languages simultaneously in an interactive prompt
+[sic]
+name = "polyglot"
+version = "0.0.0"
+source = { type = "tarball", url = "https://github.com/specious/polyglot/archive/refs/heads/master.tar.gz", hash = "sha256:55cdedaa02c9a6a3fb55bf1cea98bd41b51361c2e4703569c3d3c15df6a7cf10" }
+depends = []

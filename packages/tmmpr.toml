@@ -1,0 +1,6 @@
+# Terminal mind mapper
+[sic]
+name = "tmmpr"
+version = "0.1.1"
+source = { type = "tarball", url = "https://github.com/tanciaku/tmmpr/archive/refs/tags/v0.1.1.tar.gz", hash = "sha256:e15eb43872484147c2c9b54f618c8fb8a96d0d013e120d06e9d80a25ea0d42ec" }
+depends = []
