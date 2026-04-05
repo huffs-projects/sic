@@ -2,6 +2,26 @@
 
 Userland package manager for ~/.local: installs, upgrades, and removes packages under a user prefix without touching the system. On Unix, sic reads common system package databases (dpkg, pacman, Alpine apk, Homebrew Cellar) best-effort to satisfy dependencies with already-installed system packages when possible. If none are present or readable, the system package set is empty and resolution uses only sic packages.
 
+## Install
+
+From [GitHub releases](https://github.com/sicos/sic/releases) (see `scripts/install-curl.sh` for naming). Default install dir is `~/.local/bin`; override with `SIC_INSTALL_DIR`.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sicos/sic/main/scripts/install-curl.sh | sh
+```
+
+With [eget](https://github.com/zyedidia/eget) on your PATH:
+
+```bash
+eget sicos/sic --file sic --to ~/.local/bin
+```
+
+Or download via the eget helper script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sicos/sic/main/scripts/install-eget.sh | sh
+```
+
 ## PATH
 
 Add the sic bin directory to your PATH so installed binaries are available:

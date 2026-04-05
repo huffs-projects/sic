@@ -1,0 +1,3 @@
+{
+  "ripgrep-all": ["ripgrep >= 13"]
+}
