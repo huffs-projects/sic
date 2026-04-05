@@ -9,17 +9,17 @@
 # Requires: bash, curl, tar or unzip, and python3 (stdlib only, for GitHub JSON).
 #
 # Environment:
-#   SIC_REPO          GitHub repo as owner/name (default: sicos/sic)
+#   SIC_REPO          GitHub repo as owner/name (default: huffs-projects/sic)
 #   SIC_INSTALL_DIR   Directory for the sic binary (default: ~/.local/bin)
 #   GITHUB_TOKEN / GH_TOKEN  Optional; raises API rate limits
 #
 # Example:
-#   curl -fsSL https://raw.githubusercontent.com/sicos/sic/main/scripts/install-curl.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/huffs-projects/sic/main/scripts/install-curl.sh | sh
 #   SIC_INSTALL_DIR=/usr/local/bin sh ./scripts/install-curl.sh
 
 set -euo pipefail
 
-: "${SIC_REPO:=sicos/sic}"
+: "${SIC_REPO:=huffs-projects/sic}"
 : "${SIC_INSTALL_DIR:=${HOME}/.local/bin}"
 
 die() {

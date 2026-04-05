@@ -4,7 +4,7 @@
 # Prerequisites: eget on PATH (brew install eget, or see eget README).
 #
 # Environment:
-#   SIC_REPO          GitHub repo as owner/name (default: sicos/sic)
+#   SIC_REPO          GitHub repo as owner/name (default: huffs-projects/sic)
 #   SIC_INSTALL_DIR   Directory for the sic binary (default: ~/.local/bin)
 #   SIC_EGET_EXTRA    Extra args passed to eget (space-separated, quoted carefully)
 #
@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-: "${SIC_REPO:=sicos/sic}"
+: "${SIC_REPO:=huffs-projects/sic}"
 : "${SIC_INSTALL_DIR:=${HOME}/.local/bin}"
 
 if ! command -v eget >/dev/null 2>&1; then
